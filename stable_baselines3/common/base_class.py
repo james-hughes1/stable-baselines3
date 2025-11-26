@@ -22,7 +22,13 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.preprocessing import check_for_nested_spaces, is_image_space, is_image_space_channels_first
-from stable_baselines3.common.save_util import load_from_zip_file, recursive_getattr, recursive_setattr, save_to_zip_file
+from stable_baselines3.common.save_util import (
+    load_from_zip_file,
+    recursive_getattr,
+    recursive_setattr,
+    save_to_zip_file,
+    strip_state_dict_prefix,
+)
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule, TensorDict
 from stable_baselines3.common.utils import (
     FloatSchedule,
@@ -573,7 +579,7 @@ class BaseAlgorithm(ABC):
 
     def set_parameters(
         self,
-        load_path_or_dict: Union[str, TensorDict],
+        load_path_or_dict: Union[str, dict[str, TensorDict]],
         exact_match: bool = True,
         device: Union[th.device, str] = "auto",
     ) -> None:
@@ -652,8 +658,14 @@ class BaseAlgorithm(ABC):
     ) -> SelfBaseAlgorithm:
         """
         Load the model from a zip-file.
-        Warning: ``load`` re-creates the model from scratch, it does not update it in-place!
-        For an in-place load use ``set_parameters`` instead.
+        Warning:
+            ``load`` re-creates the model from scratch, it does not update it in-place!
+            For an in-place load use ``set_parameters`` instead.
+
+            If the model was saved with a compiled PyTorch policy, the loaded model will
+            automatically strip `_orig_mod.` prefixes from the state dict keys and emit a warning.
+            PyTorch recommends saving/loading the original, uncompiled model and recompiling
+            after loading.
 
         :param path: path to the file (or a file-like) where to
             load the agent from
@@ -740,6 +752,21 @@ class BaseAlgorithm(ABC):
         model._setup_model()
 
         try:
+            # Strip _orig_mod. prefix from policy parameters and optimizer, if present
+            warning_msg = (
+                "Detected '_orig_mod.' keys in {key_name}, "
+                "you have probably compiled the policy, saved, and are now trying to load again. "
+                "Note that PyTorch advises against this workflow and recommends recompiling after loading, during runtime. "
+                "See https://github.com/DLR-RM/stable-baselines3/issues/2137 for details "
+                "and https://github.com/pytorch/pytorch/issues/101107#issuecomment-1542688089 for further info."
+            )
+            for key_name in ["policy", "policy.optimizer"]:
+                if key_name in params:
+                    new_state_dict, stripped = strip_state_dict_prefix(params[key_name], "_orig_mod.")
+                    if stripped:
+                        warnings.warn(warning_msg.format(key_name=key_name))
+                        params[key_name] = new_state_dict
+
             # put state_dicts back in place
             model.set_parameters(params, exact_match=True, device=device)
         except RuntimeError as e:

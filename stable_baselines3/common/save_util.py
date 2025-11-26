@@ -373,6 +373,36 @@ def load_from_pkl(path: Union[str, pathlib.Path, io.BufferedIOBase], verbose: in
     return obj
 
 
+def strip_state_dict_prefix(
+    state_dict: TensorDict,
+    prefix: str,
+) -> tuple[TensorDict, bool]:
+    """
+    Return a copy of the state_dict with the specified prefix removed from keys.
+    Also returns True if any key had the prefix (i.e., stripping was performed).
+
+    :param state_dict: The state dictionary being loaded.
+    :param prefix: The prefix to remove from keys in state_dict.
+
+    :return: (state_dict, needs_strip)
+    """
+
+    # Check if any key starts with the prefix
+    needs_strip = any(key.startswith(prefix) for key in state_dict)
+    if not needs_strip:
+        return state_dict, False
+
+    new_state_dict = {}
+    prefix_len = len(prefix)
+    for key, value in state_dict.items():
+        if key.startswith(prefix):
+            new_state_dict[key[prefix_len:]] = value
+        else:
+            new_state_dict[key] = value
+
+    return new_state_dict, True
+
+
 def load_from_zip_file(
     load_path: Union[str, pathlib.Path, io.BufferedIOBase],
     load_data: bool = True,
@@ -380,7 +410,7 @@ def load_from_zip_file(
     device: Union[th.device, str] = "auto",
     verbose: int = 0,
     print_system_info: bool = False,
-) -> tuple[Optional[dict[str, Any]], TensorDict, Optional[TensorDict]]:
+) -> tuple[Optional[dict[str, Any]], dict[str, TensorDict], Optional[TensorDict]]:
     """
     Load model data from a .zip archive
 
