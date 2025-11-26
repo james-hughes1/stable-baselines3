@@ -874,3 +874,23 @@ def test_save_load_clip_range_portable(tmp_path, model_class):
     assert isinstance(model.clip_range, FloatSchedule)
     assert isinstance(model.clip_range.value_schedule, ConstantSchedule)
     assert model.clip_range.value_schedule.val == 0.2
+
+
+@pytest.mark.parametrize("model_class", [PPO])
+def test_save_load_compile(tmp_path, model_class):
+    """
+    Test that models that when a model class has its policy compiled using PyTorch, and then is saved,
+    it can be loaded without encountering issues, but also produces a warning.
+
+    See GH#2137
+    """
+
+    # Create a model, compile and save
+    model = model_class("MlpPolicy", "Pendulum-v1", verbose=1)
+    model.policy = th.compile(model.policy)
+    model.save(tmp_path / "sac_pendulum_compiled.zip")
+    del model
+
+    # Check the model can be loaded and a warning is raised
+    with pytest.warns(UserWarning, match=r".*'_orig_mod\.' keys.*"):
+        model_class.load(tmp_path / "sac_pendulum_compiled.zip")
