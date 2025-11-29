@@ -658,10 +658,12 @@ class BaseAlgorithm(ABC):
     ) -> SelfBaseAlgorithm:
         """
         Load the model from a zip-file.
-        Warning:
+        
+        .. warning::
             ``load`` re-creates the model from scratch, it does not update it in-place!
             For an in-place load use ``set_parameters`` instead.
 
+        .. warning::
             If the model was saved with a compiled PyTorch policy, the loaded model will
             automatically strip `_orig_mod.` prefixes from the state dict keys and emit a warning.
             PyTorch recommends saving/loading the original, uncompiled model and recompiling
